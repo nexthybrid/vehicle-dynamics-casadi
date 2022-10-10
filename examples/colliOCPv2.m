@@ -96,6 +96,9 @@ classdef colliOCPv2 < handle
         a_z % ego vehicle front Ziegler circle to CG distance [m]
         b_z % ego vehicle rear Ziegler circle to CG distance [m]
         R_col % collision radius [m]
+        aBmpr % ego vehicle CG to front bumper distance
+        bBmpr % ego vehicle CG to rear bumper distance
+        bdyWdth % ego vehicle body width
         g % gravity [kgm/s^2]
     end
 
@@ -108,9 +111,9 @@ classdef colliOCPv2 < handle
             % Inputs:
             % N: double, the number of control intervals
             Defaults = {20};
-            Defaults(1:nargin-1) = varargin;
+            Defaults(1:nargin) = varargin;
             obj.N = Defaults{1};
-
+            
             obj.opti = casadi.Opti();
         end
 
@@ -216,9 +219,12 @@ classdef colliOCPv2 < handle
             % a_z: double, ego vehicle front Ziegler circle to CG distance [m]
             % b_z: double, ego vehicle rear Ziegler circle to CG distance [m]
             % R_col: double, collision radius [m]
+            % aBmpr: double, ego vehicle CG to front bumper distance [m]
+            % bBmpr: double, ego vehicle CG to rear bumper distance [m]
+            % bdyWdth: double, ego vehicle body width [m]
             % g: double, gravity [kgm/s^2]
 
-            Defaults = {2,1700,2385,3,0.6,2e3,1e4,1.392,1.008,0.3,1.5,1.5,2,9.81};
+            Defaults = {1.5,1700,2385,3,0.6,2e3,1e4,1.392,1.008,0.3,1.5,1.5,2,2,2,2,9.81};
             Defaults(1:nargin-1) = varargin;
             obj.T = Defaults{1};
             obj.m = Defaults{2};
@@ -233,7 +239,10 @@ classdef colliOCPv2 < handle
             obj.a_z = Defaults{11};
             obj.b_z = Defaults{12};
             obj.R_col = Defaults{13};
-            obj.g = Defaults{14};
+            obj.aBmpr = Defaults{14};
+            obj.bBmpr = Defaults{15};
+            obj.bdyWdth = Defaults{16};
+            obj.g = Defaults{17};
         end
 
         function add_objective(obj)
@@ -247,7 +256,9 @@ classdef colliOCPv2 < handle
             %modify_objective Modify the objective function to the OCP
             %   add_objective(obj) modifies the OCP objective
             %   function.
-            obj.opti.minimize(sum((obj.px(2:end) - obj.x_b).^2 - (obj.py(2:end) - obj.y_b).^2) );
+
+            % maximize CG-to-CG distance to the obstacle
+            obj.opti.minimize(-sum((obj.px(2:end) - obj.x_b).^2 + (obj.py(2:end) - obj.y_b).^2) );
         end
 
         function add_dynamic_constraints(obj)
@@ -350,7 +361,7 @@ classdef colliOCPv2 < handle
             %   geometry constraints on the vehicle state. A first version
             %   here is simply imposing the ego vehicle CG constraints
 
-            %obj.opti.subject_to(0<=obj.px<=20); % X limit
+            obj.opti.subject_to(-5<=obj.px<=20); % X limit
             obj.opti.subject_to(2<=obj.py<=7); % Y limit
             obj.opti.subject_to(-1<=obj.delta<=1); % steering angle limit [rad]
             % for initial debug, bound the wheel speeds
@@ -382,6 +393,17 @@ classdef colliOCPv2 < handle
             obj.x_a = 4; obj.y_a = 3;
             obj.x_b = 6; obj.y_b = 3;
             obj.x_c = 8; obj.y_c = 3;
+        end
+
+        function add_second_obstacle_centers(obj)
+            %add_second_obstacle_centers Add a second obstacle
+            %   add_second_obstacle_centers(obj) adds the obstacle
+            %   Ziegler collision circle centers to the OCP
+
+            % the obstacle is denoted a,b,c for its three circle centers
+            obj.x_a2 = 4; obj.y_a2 = 3;
+            obj.x_b2 = 6; obj.y_b2 = 3;
+            obj.x_c2 = 8; obj.y_c2 = 3;
         end
 
         function add_dynamic_obstacle_centers(obj,x_traj,y_traj,psi_traj)
@@ -439,14 +461,14 @@ classdef colliOCPv2 < handle
             %   set_solver_init(obj) sets the solver initial values for the
             %   set of decision variables selected
 
-            obj.opti.set_initial(obj.vx, 5);
+            obj.opti.set_initial(obj.vx, 3);
             obj.opti.set_initial(obj.vy, 0);
             obj.opti.set_initial(obj.px, 0);
             obj.opti.set_initial(obj.py, 5);
             obj.opti.set_initial(obj.r, 0);
             %obj.opti.set_initial(obj.psi, 0);
-            obj.opti.set_initial(obj.omega_f, 30);
-            obj.opti.set_initial(obj.omega_r, 30);
+            obj.opti.set_initial(obj.omega_f, 10);
+            obj.opti.set_initial(obj.omega_r, 10);
             obj.opti.set_initial(obj.delta, 0);
 
             % set control initial values
@@ -460,9 +482,16 @@ classdef colliOCPv2 < handle
 
             obj.opti.set_initial(sol.value_variables());
         end
-        function sol = solve(obj)
+        function sol = solve(obj,varargin)
             %solve Solve the OCP and produce the solution object
-            obj.opti.solver('ipopt'); % set numerical backend
+            % sol = solve(obj,plugin_opt,solver_opt) uses the plugin
+            % options and solver options to create an IPOPT solver and
+            % solves the OCP.
+            Defaults = {struct([]),struct([])};
+            Defaults(1:nargin-1) = varargin;
+            plugin_opt = Defaults{1};
+            solver_opt = Defaults{2};
+            obj.opti.solver('ipopt',plugin_opt,solver_opt); % set numerical backend
             sol = obj.opti.solve();   % actual solve
         end
     end

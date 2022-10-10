@@ -52,6 +52,9 @@ classdef colliOCP < handle
         a % ego vehicle front Ziegler circle to CG distance
         b % ego vehicle rear Ziegler circle to CG distance
         R_col % collision radius [m]
+        aBmpr % ego vehicle CG to front bumper distance
+        bBmpr % ego vehicle CG to rear bumper distance
+        bdyWdth % ego vehicle body width
     end
 
     methods
@@ -110,21 +113,27 @@ classdef colliOCP < handle
             % a: double, ego vehicle front Ziegler circle to CG distance [m]
             % b: double, ego vehicle rear Ziegler circle to CG distance [m]
             % R_col: double, collision radius [m]
+            % aBmpr: double, ego vehicle CG to front bumper distance [m]
+            % bBmpr: double, ego vehicle CG to rear bumper distance [m]
+            % bdyWdth: double, ego vehicle body width [m]
 
-            Defaults = {2,1700,1.5,1.5,2};
+            Defaults = {2,1700,1.5,1.5,2,2,2,2};
             Defaults(1:nargin-1) = varargin;
             obj.T = Defaults{1};
             obj.m = Defaults{2};
             obj.a = Defaults{3};
             obj.b = Defaults{4};
             obj.R_col = Defaults{5};
+            obj.aBmpr = Defaults{6};
+            obj.bBmpr = Defaults{7};
+            obj.bdyWdth = Defaults{8};
         end
 
         function add_objective(obj)
             %add_objective Adds the objective function to the OCP
             %   add_objective(obj) applies the pre-defined OCP objective
             %   function.
-            obj.opti.minimize(sum(obj.f_thr.^2+obj.f_lat.^2+obj.u_beta.^2));
+            obj.opti.minimize(sum((obj.f_thr/1000).^2+(obj.f_lat/1000).^2+obj.u_beta.^2));
         end
 
         function add_dynamic_constraints(obj)
@@ -207,8 +216,8 @@ classdef colliOCP < handle
             %   case, the selected decision variable is simply the global y
             %   coordinate of the ego vehicle.
 
-            obj.opti.subject_to(obj.py(obj.N+1)>2); % lower bound for py
-            obj.opti.subject_to(obj.py(obj.N+1)<7); % upper bound for py
+            obj.opti.subject_to(2<=obj.py(obj.N+1)); % lower bound for py
+            obj.opti.subject_to(obj.py(obj.N+1)<=7); % upper bound for py
         end
 
         function add_path_constraints(obj)
@@ -310,10 +319,32 @@ classdef colliOCP < handle
             obj.opti.set_initial(obj.psi, 0);
         end
 
+        function warm_start_init(obj,sol)
+            %warm_start_init Warm-start the initial condition
+            % warm_start_init(obj,sol) warm-starts the intial condition by
+            % using all the optimization variables from a previous solution
+
+            obj.opti.set_initial(sol.value_variables());
+        end
+
         function sol = solve(obj)
             %solve Solve the OCP and produce the solution object
             obj.opti.solver('ipopt'); % set numerical backend
             sol = obj.opti.solve();   % actual solve
+        end
+
+        function sol = solveSQP(obj)
+            %solveSQP Solve the OCP with SQP solver
+            opts = struct;
+            opts.qpsol = 'qrqp';
+            opts.qpsol_options.print_iter = true;
+            opts.qpsol_options.error_on_fail = false;
+            opts.print_status = true;
+            opts.print_iteration = false;
+            opts.print_time = false;
+            obj.opti.solver('sqpmethod',opts);
+            sol = obj.opti.solve();   % actual solve
+
         end
     end
 
