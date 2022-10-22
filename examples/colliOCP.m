@@ -136,6 +136,17 @@ classdef colliOCP < handle
             obj.opti.minimize(sum((obj.f_thr/1000).^2+(obj.f_lat/1000).^2+obj.u_beta.^2));
         end
 
+        function zero_objective(obj)
+            %zero_objective Force the objective to be a constant of zero
+            % zero_objective Use constant zero as the objective,
+            % effectively making no cost functions. So the solver will only
+            % need to deal with the feasibility problem, and somehow
+            % optimize itself towards a feasible solution.
+
+            obj.opti.minimize(0);
+            disp('Zero objective function applied!');
+        end
+
         function add_dynamic_constraints(obj)
             %add_dynamic_constraints Adds the (ego) dynamics constraints
             %   add_dynamic_constraints(obj) adds the ego vehicle dynamics
@@ -246,15 +257,29 @@ classdef colliOCP < handle
             obj.y_3 = obj.py + obj.a.*sin(obj.psi);
         end
 
-        function add_obstacle_centers(obj)
+        function add_obstacle_centers(obj,varargin)
             %add_obstacle_centers Add the obstacle collision centers
-            %   add_obstacle_centers(obj) adds the obstacle Ziegler
-            %   collision circle centers to the OCP
+            %   add_obstacle_centers(obj,x_obs_c,y_obs_c,psi_obs_c) adds
+            %   the obstacle Ziegler collision circle centers to the OCP
+            %   Inputs:
+            %   x_obs_c: double, obstacle vehicle CG X coordinate
+            %   y_obs_c: double, obstacle vehicle CG Y coordinate
+            %   psi_obs_c: double, obstacle vehicle CG yaw angle
+
+            Defaults = {10,3,0};
+            Defaults(1:nargin-1) = varargin;
+            x_obs_c = Defaults{1};
+            y_obs_c = Defaults{2};
+            psi_obs_c = Defaults{3};
 
             % the obstacle is denoted a,b,c for its three circle centers
-            obj.x_a = 8; obj.y_a = 3;
-            obj.x_b = 10; obj.y_b = 3;
-            obj.x_c = 12; obj.y_c = 3;
+            obsLen = 4; % obstacle vehicle length
+            obj.x_a = x_obs_c - obsLen/2*cos(psi_obs_c); 
+            obj.y_a = y_obs_c - obsLen/2*sin(psi_obs_c);
+            obj.x_b = x_obs_c;
+            obj.y_b = y_obs_c;
+            obj.x_c = x_obs_c + obsLen/2*cos(psi_obs_c); 
+            obj.y_c = y_obs_c + obsLen/2*sin(psi_obs_c);
         end
 
         function add_dynamic_obstacle_centers(obj,x_traj,y_traj,psi_traj)

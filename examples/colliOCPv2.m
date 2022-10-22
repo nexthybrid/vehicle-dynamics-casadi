@@ -261,6 +261,17 @@ classdef colliOCPv2 < handle
             obj.opti.minimize(-sum((obj.px(2:end) - obj.x_b).^2 + (obj.py(2:end) - obj.y_b).^2) );
         end
 
+        function zero_objective(obj)
+            %zero_objective Force the objective to be a constant of zero
+            % zero_objective Use constant zero as the objective,
+            % effectively making no cost functions. So the solver will only
+            % need to deal with the feasibility problem, and somehow
+            % optimize itself towards a feasible solution.
+
+            obj.opti.minimize(0);
+            disp('Zero objective function applied!');
+        end
+        
         function add_dynamic_constraints(obj)
             %add_dynamic_constraints Adds the (ego) dynamics constraints
             %   add_dynamic_constraints(obj) adds the ego vehicle dynamics
