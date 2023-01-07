@@ -224,7 +224,7 @@ classdef colliOCPv2 < handle
             % bdyWdth: double, ego vehicle body width [m]
             % g: double, gravity [kgm/s^2]
 
-            Defaults = {1.5,1700,2385,3,0.6,2e3,1e4,1.392,1.008,0.3,1.5,1.5,2,2,2,2,9.81};
+            Defaults = {5,1700,2385,3,0.6,2e3,1e4,1.392,1.008,0.3,1.5,1.5,2,2,2,2,9.81};
             Defaults(1:nargin-1) = varargin;
             obj.T = Defaults{1};
             obj.m = Defaults{2};
@@ -249,7 +249,7 @@ classdef colliOCPv2 < handle
             %add_objective Adds the objective function to the OCP
             %   add_objective(obj) applies the pre-defined OCP objective
             %   function.
-            obj.opti.minimize(sum((obj.tau/1000).^2+obj.nu.^2));
+            obj.opti.minimize(sum((obj.tau/1000).^2+(obj.nu/5).^2) + sum((obj.vy).^2));
         end
 
         function modify_objective(obj)
@@ -329,18 +329,34 @@ classdef colliOCPv2 < handle
             %   omega_f0: double, ego vehicle initial front wheel speed [rad/s]
             %   omega_r0: double, ego vehicle initial rear wheel speed [rad/s]
             %   delta0: double, ego vehicle initial steering angle [rad]
+            
+            if (nargin == 2)
+                % obj, X as inputs
+                vx0 = varargin{1}(1);
+                vy0 = varargin{1}(2);
+                px0 = varargin{1}(3);
+                py0 = varargin{1}(4);
+                r0 = varargin{1}(5);
+                psi0 = varargin{1}(6);
+                omega_f0 = varargin{1}(7);
+                omega_r0 = varargin{1}(8);
+                delta0 = varargin{1}(9);
+            elseif (nargin == 10)
+                %
+                Defaults = {2, -0.1, 0.2, 5, 0.1, 0.1, 30,30,0.1};
+                Defaults(1:nargin-1) = varargin;
+                vx0 = Defaults{1};
+                vy0 = Defaults{2};
+                px0 = Defaults{3};
+                py0 = Defaults{4};
+                r0 = Defaults{5};
+                psi0 = Defaults{6};
+                omega_f0 = Defaults{7};
+                omega_r0 = Defaults{8};
+                delta0 = Defaults{9};
+            end
 
-            Defaults = {2, -0.1, 0.2, 5, 0.1, 0.1, 30,30,0.1};
-            Defaults(1:nargin-1) = varargin;
-            vx0 = Defaults{1};
-            vy0 = Defaults{2};
-            px0 = Defaults{3};
-            py0 = Defaults{4};
-            r0 = Defaults{5};
-            psi0 = Defaults{6};
-            omega_f0 = Defaults{7};
-            omega_r0 = Defaults{8};
-            delta0 = Defaults{9};
+
 
             obj.opti.subject_to(obj.vx(1)==vx0);
             obj.opti.subject_to(obj.vy(1)==vy0);
@@ -361,8 +377,9 @@ classdef colliOCPv2 < handle
             %   case, the selected decision variable is simply the global y
             %   coordinate of the ego vehicle.
 
-            %obj.opti.subject_to(obj.py(obj.N+1)>2); % lower bound for py
-            %obj.opti.subject_to(obj.py(obj.N+1)<7); % upper bound for py
+            obj.opti.subject_to(obj.py(obj.N+1) == 3); % lower bound for py
+            obj.opti.subject_to(obj.px(obj.N+1) >= 10); % upper bound for px
+            obj.opti.subject_to(obj.psi(obj.N+1) == 0); % upper bound for psi
         end
 
         function add_path_constraints(obj)
@@ -374,7 +391,8 @@ classdef colliOCPv2 < handle
 
             obj.opti.subject_to(-5<=obj.px<=20); % X limit
             obj.opti.subject_to(2<=obj.py<=7); % Y limit
-            obj.opti.subject_to(-1<=obj.delta<=1); % steering angle limit [rad]
+            obj.opti.subject_to(-0.8<=obj.delta<=0.8); % steering angle limit [rad]
+            obj.opti.subject_to(cos(obj.psi).*obj.vx + sin(obj.psi).*obj.vy >= 1);
             % for initial debug, bound the wheel speeds
             %obj.opti.subject_to(-200<=obj.omega_f<=200); %
             %obj.opti.subject_to(-200<=obj.omega_r<=200); %
@@ -483,7 +501,7 @@ classdef colliOCPv2 < handle
             obj.opti.set_initial(obj.delta, 0);
 
             % set control initial values
-            obj.opti.set_initial(obj.nu, 0.2) ;
+            obj.opti.set_initial(obj.nu, 0) ;
         end
 
         function warm_start_init(obj,sol)
@@ -580,10 +598,10 @@ classdef colliOCPv2 < handle
             F_xrt = max(-mu*F_zr, min(mu*F_zr, C_kappa * kappa_r));
             F_yft = max(-mu*F_zf, min(mu*F_zf, C_alpha * alpha_f));
             F_yrt = max(-mu*F_zr, min(mu*F_zr, C_alpha * alpha_r));
-%             F_xft = C_kappa * kappa_f;
-%             F_xrt = C_kappa * kappa_r;
-%             F_yft = C_alpha * tan(alpha_f);
-%             F_yrt = C_alpha * tan(alpha_r);
+             %F_xft = C_kappa * kappa_f;
+             %F_xrt = C_kappa * kappa_r;
+             %F_yft = C_alpha * tan(alpha_f);
+             %F_yrt = C_alpha * tan(alpha_r);
 
 
             F_xfb = cos(delta)*F_xft - sin(delta)*F_yft;
@@ -618,6 +636,23 @@ classdef colliOCPv2 < handle
 
             % finally, turn dx into a column vector
             dx = vertcat(dx1,dx2,dx3,dx4,dx5,dx6,dx7,dx8,dx9);
+        end
+
+        function X_next =  system_update(obj,X0,U0,tHorizon,nHorizon)
+            %system_update Update the system one step ahead
+            f = @obj.vehdyn;
+            dt = tHorizon/nHorizon; % length of a control interval
+            % Runge-Kutta 4 integration
+            k1 = f(X0,         U0);
+            k2 = f(X0+dt/2*k1, U0);
+            k3 = f(X0+dt/2*k2, U0);
+            k4 = f(X0+dt*k3,   U0);
+            X_next = X0 + dt/6*(k1+2*k2+2*k3+k4);
+        end
+
+        function Xobs = obstacle_update(obj)
+            %obstacle_update Updates the obstacle position
+            Xobs = [obj.x_a; obj.x_b; obj.x_c];
         end
     end
 

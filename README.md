@@ -10,10 +10,10 @@ This repo uses the MATLAB Interface of Casadi to implement vehicle dynamics and 
 ## Try the Demos
 To get quickly started, open your MATLAB and navigate to the `examples` folder, open one of the following MATLAB livescript files and just hit `Run`:
 ```
-ex1_static_obstacle 	% box-like simple vehicle avoiding a static obstacle
-ex2_moving_obstacle 	% box-like simple vehicle avoiding a moving obstacle
-ex3_static_obstacle_dugoff 	% vehicle with a Dugoff tire model avoiding a static obstacle
+ex1_static_obstacle 	% box-like simple vehicle (5-states) avoiding a static obstacle
+ex2_moving_obstacle 	% box-like simple vehicle (5-states) avoiding a moving obstacle
+ex3_static_obstacle_linear_tire 	% vehicle with a linear tire model (9-states) avoiding a static obstacle
 ```
 
 ## Issues:
-Currently, example 1 and example 2 works fine, but example 3 is struggling with feasible Casadi solutions. Any help is appreciated.
+[-] (resolved) Currently, example 1 and example 2 works fine, but example 3 is struggling with feasible Casadi solutions. Any help is appreciated.
